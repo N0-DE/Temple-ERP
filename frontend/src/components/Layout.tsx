@@ -16,7 +16,7 @@ export function Layout() {
         <main className="flex-1 overflow-y-auto">
           {/* Centered content wrapper */}
           <div className="min-h-full px-6 py-8 flex flex-col items-center">
-            <div className="w-full max-w-6xl">
+            <div className="w-full max-w-7xl">
               <Outlet />
             </div>
           </div>

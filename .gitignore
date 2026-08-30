@@ -1,5 +1,19 @@
 # Dependencies
 node_modules/
+backend/venv/
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+*.egg-info/
+
+# Local databases
+backend/temple_erp.db
+*.db
 
 # Build outputs
 dist/

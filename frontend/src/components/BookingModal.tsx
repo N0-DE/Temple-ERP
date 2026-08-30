@@ -14,11 +14,6 @@ type BookingModalProps = {
 
 const PAYMENT_MODES = ["Cash", "UPI", "Card", "Net Banking"]
 
-const STARS = [
-  "Mesha", "Vrishabha", "Mithuna", "Karkata", "Simha", "Kanya",
-  "Tula", "Vrischika", "Dhanu", "Makara", "Kumbha", "Meena"
-]
-
 const NAKSHATRAS = [
   "Aswini", "Bharani", "Krittika", "Rohini", "Mrigashira", "Ardra",
   "Punarvasu", "Pushya", "Ashlesha", "Magha", "Purva Phalguni",
@@ -209,13 +204,6 @@ export function BookingModal({ isOpen, onClose, poojaName, amount }: BookingModa
                   <div className="space-y-1.5 md:col-span-2">
                     <label className="text-sm font-medium">{t("address")}</label>
                     <textarea name="address" value={formData.address} onChange={handleChange} rows={2} className={`${inputClass} resize-none`} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium">{t("starRasi")}</label>
-                    <select name="star" value={formData.star} onChange={handleChange} className={selectClass}>
-                      <option value="">{t("selectStar")}</option>
-                      {STARS.map((s) => <option key={s} value={s}>{s}</option>)}
-                    </select>
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium">{t("nakshatra")}</label>

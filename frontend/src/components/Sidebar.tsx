@@ -10,7 +10,13 @@ import {
   ChevronLeft,
   ChevronRight,
   Sun,
-  Moon
+  Moon,
+  HandCoins,
+  Users,
+  Wallet,
+  AlertTriangle,
+  BarChart3,
+  Settings,
 } from "lucide-react"
 
 type SidebarProps = {
@@ -24,10 +30,19 @@ const menuItems: { labelKey: TranslationKey; icon: typeof Flame; path: string }[
   { labelKey: "openingBalance", icon: WalletCards, path: "/opening-balance" },
 ]
 
+const fcSubItems = [
+  { label: "Families", icon: Users, path: "/family-contributions/families" },
+  { label: "Contributions", icon: Wallet, path: "/family-contributions/contributions" },
+  { label: "Outstanding Dues", icon: AlertTriangle, path: "/family-contributions/outstanding" },
+  { label: "Reports", icon: BarChart3, path: "/family-contributions/reports" },
+  { label: "Settings", icon: Settings, path: "/family-contributions/settings" },
+]
+
 export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const location = useLocation()
   const { theme, setTheme } = useTheme()
   const { t } = useLanguage()
+  const isFcActive = location.pathname.startsWith("/family-contributions")
 
   return (
     <motion.div
@@ -37,11 +52,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
     >
       <div className="p-4 flex items-center justify-between h-16 border-b border-border">
         {!isCollapsed && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="font-bold text-xl tracking-tight text-primary flex items-center gap-2"
-          >
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="font-bold text-xl tracking-tight text-primary flex items-center gap-2">
             <Flame className="w-6 h-6" />
             {t("templeErp")}
           </motion.div>
@@ -70,38 +81,58 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
               to={item.path}
               className={cn(
                 "flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group",
-                isActive
-                  ? "bg-primary/10 text-primary font-medium"
-                  : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                isActive ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:bg-secondary hover:text-foreground",
               )}
             >
               <item.icon className={cn("w-5 h-5 flex-shrink-0", isActive ? "text-primary" : "")} />
-              {!isCollapsed && (
-                <span className="truncate whitespace-nowrap">{label}</span>
-              )}
+              {!isCollapsed && <span className="truncate whitespace-nowrap">{label}</span>}
             </Link>
           )
         })}
+
+        {/* Family Contributions section */}
+        <div className="mt-2">
+          <Link
+            to="/family-contributions/outstanding"
+            className={cn(
+              "flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200",
+              isFcActive ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:bg-secondary hover:text-foreground",
+            )}
+          >
+            <HandCoins className={cn("w-5 h-5 flex-shrink-0", isFcActive ? "text-primary" : "")} />
+            {!isCollapsed && <span className="truncate whitespace-nowrap">{t("familyContributions")}</span>}
+          </Link>
+
+          {!isCollapsed && isFcActive && (
+            <div className="ml-4 mt-1 flex flex-col gap-0.5 border-l border-border pl-3">
+              {fcSubItems.map((sub) => {
+                const subActive = location.pathname === sub.path || location.pathname.startsWith(sub.path + "/")
+                return (
+                  <Link
+                    key={sub.path}
+                    to={sub.path}
+                    className={cn(
+                      "flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition",
+                      subActive ? "text-primary font-medium" : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    <sub.icon className="h-3.5 w-3.5" />
+                    {sub.label}
+                  </Link>
+                )
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="p-3 border-t border-border">
         <button
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-          className={cn(
-            "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200",
-            "text-muted-foreground hover:bg-secondary hover:text-foreground"
-          )}
+          className={cn("w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200", "text-muted-foreground hover:bg-secondary hover:text-foreground")}
         >
-          {theme === "dark" ? (
-            <Sun className="w-5 h-5 flex-shrink-0 text-yellow-400" />
-          ) : (
-            <Moon className="w-5 h-5 flex-shrink-0 text-slate-600" />
-          )}
-          {!isCollapsed && (
-            <span className="truncate whitespace-nowrap text-sm font-medium">
-              {theme === "dark" ? t("lightMode") : t("darkMode")}
-            </span>
-          )}
+          {theme === "dark" ? <Sun className="w-5 h-5 flex-shrink-0 text-yellow-400" /> : <Moon className="w-5 h-5 flex-shrink-0 text-slate-600" />}
+          {!isCollapsed && <span className="truncate whitespace-nowrap text-sm font-medium">{theme === "dark" ? t("lightMode") : t("darkMode")}</span>}
         </button>
       </div>
     </motion.div>

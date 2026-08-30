@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core"
 
 export type Pooja = { id?: string; name: string; description: string; amount: number; duration_minutes: number; category: string }
-export type Booking = { id?: string; devoteeName: string; phoneNumber: string; address: string; star: string; nakshatra: string; date: string; time: string; remarks: string; poojaName: string; amount: number; paymentMode: string; status: "Paid" | "Pending"; createdAt?: number }
+export type Booking = { id?: string; devoteeName: string; phoneNumber: string; address: string; star: string; nakshatra: string; date: string; time: string; remarks: string; poojaName: string; amount: number; paymentMode: string; status: "Paid" | "Pending"; createdAt?: number; isAdvanceBooking?: boolean }
 export type BookingStats = { totalCollection: number; todayCollection: number; monthCollection: number; pendingCollection: number }
 export type BookingsPage = { bookings: Booking[]; cursor: null; hasMore: false }
 export type CounterBalance = { openingBalance: number }
@@ -12,7 +12,7 @@ const isTauri = () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in 
 const read = <T>(key: string, fallback: T): T => { try { return JSON.parse(localStorage.getItem(key) ?? "") as T } catch { return fallback } }
 const write = <T>(key: string, value: T) => { localStorage.setItem(key, JSON.stringify(value)); changed() }
 
-const toDb = (booking: Booking) => ({ id: booking.id, devoteeName: booking.devoteeName, phoneNumber: booking.phoneNumber, address: booking.address, star: booking.star, nakshatra: booking.nakshatra, date: booking.date, time: booking.time, remarks: booking.remarks, poojaName: booking.poojaName, amount: booking.amount, paymentMode: booking.paymentMode, status: booking.status, createdAt: booking.createdAt })
+const toDb = (booking: Booking) => ({ id: booking.id, devoteeName: booking.devoteeName, phoneNumber: booking.phoneNumber, address: booking.address, star: booking.star, nakshatra: booking.nakshatra, date: booking.date, time: booking.time, remarks: booking.remarks, poojaName: booking.poojaName, amount: booking.amount, paymentMode: booking.paymentMode, status: booking.status, createdAt: booking.createdAt, isAdvanceBooking: booking.isAdvanceBooking })
 
 export const getPoojas = async (): Promise<Pooja[]> => isTauri() ? invoke<Pooja[]>("db_list_poojas") : read<Pooja[]>(KEYS.poojas, [])
 export const addPooja = async (pooja: Omit<Pooja, "id">): Promise<Pooja> => {
