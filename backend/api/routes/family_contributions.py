@@ -125,7 +125,12 @@ def delete_category(category_id: str, db: Session = Depends(get_db)):
 @router.get("/settings", response_model=ContributionSettingOut)
 def read_settings(db: Session = Depends(get_db)):
     billing.ensure_default_categories(db)
-    return billing.get_settings(db)
+    settings = billing.get_settings(db)
+    if settings.drf_is_monthly:
+        settings.drf_is_monthly = False
+        db.commit()
+        db.refresh(settings)
+    return settings
 
 
 @router.put("/contribution-settings", response_model=ContributionSettingOut)
@@ -133,8 +138,10 @@ def read_settings(db: Session = Depends(get_db)):
 def update_settings(payload: ContributionSettingUpdate, db: Session = Depends(get_db)):
     settings = billing.get_settings(db)
     update_data = payload.model_dump(exclude_unset=True)
+    update_data.pop("drf_is_monthly", None)
     for field, value in update_data.items():
         setattr(settings, field, value)
+    settings.drf_is_monthly = False
     if not settings.amount_effective_from:
         settings.amount_effective_from = date.today()
     db.commit()
@@ -347,8 +354,8 @@ def create_payment(payload: PaymentCreate, db: Session = Depends(get_db)):
     if amount <= 0:
         raise HTTPException(status_code=400, detail="Payment amount must be greater than zero")
 
-    if category.slug == "drf" and not settings.drf_is_monthly:
-        billing.ensure_festival_due(db, family, category, payload.payment_date.year)
+    if category.slug == "drf":
+        billing.ensure_annual_drf_for_family(db, family, up_to=payload.payment_date)
 
     if category.is_monthly:
         billing.ensure_monthly_dues_for_family(db, family, up_to=payload.payment_date)
@@ -472,9 +479,8 @@ def read_category_outstanding(family_id: str, category_id: str, db: Session = De
 
     if family.status == "Active":
         billing.ensure_monthly_dues_for_family(db, family)
-        settings = billing.get_settings(db)
-        if category.slug == "drf" and not settings.drf_is_monthly:
-            billing.ensure_festival_due(db, family, category, date.today().year)
+        if category.slug == "drf":
+            billing.ensure_annual_drf_for_family(db, family)
 
     outstanding = billing.compute_category_outstanding(db, family_id, category_id)
     return CategoryOutstandingOut(

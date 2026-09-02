@@ -32,6 +32,9 @@ def _migrate_sqlite_columns():
         """CREATE UNIQUE INDEX IF NOT EXISTS uq_family_monthly_due
            ON family_dues(family_id, category_id, billing_year, billing_month)
            WHERE festival_charge_event_id IS NULL""",
+        """CREATE UNIQUE INDEX IF NOT EXISTS uq_family_annual_drf
+           ON family_dues(family_id, category_id, billing_year)
+           WHERE billing_month = 0 AND festival_charge_event_id IS NULL""",
     ]
     with engine.connect() as conn:
         for sql in migrations:
@@ -84,6 +87,7 @@ def seed_defaults():
         billing.normalize_family_labels(db)
         billing.free_deleted_family_numbers(db)
         billing.ensure_all_monthly_dues(db)
+        billing.ensure_all_annual_drf_dues(db)
     finally:
         db.close()
 

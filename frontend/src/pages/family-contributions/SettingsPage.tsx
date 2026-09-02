@@ -69,13 +69,16 @@ export default function SettingsPage() {
           <label className="space-y-1 text-sm"><span>Festival 1 Minimum</span><input type="number" value={settings.festival_1_minimum} onChange={(e) => setSettings({ ...settings, festival_1_minimum: Number(e.target.value) })} className="w-full rounded-lg border border-border bg-background px-3 py-2" /></label>
           <label className="space-y-1 text-sm"><span>Festival 2 Minimum</span><input type="number" value={settings.festival_2_minimum} onChange={(e) => setSettings({ ...settings, festival_2_minimum: Number(e.target.value) })} className="w-full rounded-lg border border-border bg-background px-3 py-2" /></label>
           <label className="space-y-1 text-sm"><span>Festival 3 Minimum</span><input type="number" value={settings.festival_3_minimum} onChange={(e) => setSettings({ ...settings, festival_3_minimum: Number(e.target.value) })} className="w-full rounded-lg border border-border bg-background px-3 py-2" /></label>
-          <label className="space-y-1 text-sm"><span>DRF Amount</span><input type="number" value={settings.drf_amount} onChange={(e) => setSettings({ ...settings, drf_amount: Number(e.target.value) })} className="w-full rounded-lg border border-border bg-background px-3 py-2" /></label>
+          <label className="space-y-1 text-sm md:col-span-2">
+            <span>DRF Amount (global — annual contribution)</span>
+            <input type="number" value={settings.drf_amount} onChange={(e) => setSettings({ ...settings, drf_amount: Number(e.target.value) })} className="w-full rounded-lg border border-border bg-background px-3 py-2" />
+            <p className="text-xs text-muted-foreground">Each active family receives one DRF charge per calendar year. Changes apply to newly generated years only — existing annual dues are not changed.</p>
+          </label>
           <label className="space-y-1 text-sm"><span>Financial Year</span><input value={settings.financial_year} onChange={(e) => setSettings({ ...settings, financial_year: e.target.value })} className="w-full rounded-lg border border-border bg-background px-3 py-2" /></label>
           <label className="space-y-1 text-sm"><span>Receipt Prefix</span><input value={settings.receipt_prefix} onChange={(e) => setSettings({ ...settings, receipt_prefix: e.target.value })} className="w-full rounded-lg border border-border bg-background px-3 py-2" /></label>
           <label className="space-y-1 text-sm"><span>Effective Date</span><input type="date" value={settings.amount_effective_from?.slice(0, 10) || ""} onChange={(e) => setSettings({ ...settings, amount_effective_from: e.target.value })} className="w-full rounded-lg border border-border bg-background px-3 py-2" /></label>
         </div>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={settings.partial_payment_allowed} onChange={(e) => setSettings({ ...settings, partial_payment_allowed: e.target.checked })} />Allow Partial Payments</label>
-        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={settings.drf_is_monthly} onChange={(e) => setSettings({ ...settings, drf_is_monthly: e.target.checked })} />DRF is Monthly Recurring</label>
         <button type="submit" className="rounded-lg bg-primary px-4 py-2 text-primary-foreground">Save Settings</button>
       </form>
 
@@ -83,7 +86,7 @@ export default function SettingsPage() {
         <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
           <h3 className="font-semibold mb-2">Current Rates</h3>
           <p className="text-sm text-muted-foreground">Masavari: {formatCurrency(settings.masavari_amount)}</p>
-          <p className="text-sm text-muted-foreground">DRF: {formatCurrency(settings.drf_amount)}</p>
+          <p className="text-sm text-muted-foreground">DRF: {formatCurrency(settings.drf_amount)} / year</p>
           <p className="text-sm text-muted-foreground">FY: {settings.financial_year}</p>
         </div>
 

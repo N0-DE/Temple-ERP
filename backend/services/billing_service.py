@@ -8,6 +8,7 @@ from datetime import date, datetime, timedelta
 from typing import Optional
 
 from sqlalchemy import and_, func, or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from models.family_contribution import (
@@ -28,7 +29,7 @@ DEFAULT_CATEGORIES = [
     {"name": "Festival Charge 1", "slug": "festival-1", "description": "Festival contribution", "category_type": "festival", "is_fixed": False, "is_monthly": False},
     {"name": "Festival Charge 2", "slug": "festival-2", "description": "Festival contribution", "category_type": "festival", "is_fixed": False, "is_monthly": False},
     {"name": "Festival Charge 3", "slug": "festival-3", "description": "Festival contribution", "category_type": "festival", "is_fixed": False, "is_monthly": False},
-    {"name": "Death Relief Fund", "slug": "drf", "description": "Death relief fund", "category_type": "relief", "is_fixed": True, "is_monthly": True},
+    {"name": "Death Relief Fund", "slug": "drf", "description": "Death relief fund", "category_type": "relief", "is_fixed": True, "is_monthly": False},
 ]
 
 SLUG_SETTING_MAP = {
@@ -62,6 +63,10 @@ def ensure_default_categories(db: Session) -> None:
         existing = db.query(ContributionCategory).filter(ContributionCategory.slug == item["slug"]).first()
         if not existing:
             db.add(ContributionCategory(**item, is_active=True))
+    drf = get_category_by_slug(db, "drf")
+    if drf:
+        drf.is_monthly = False
+        drf.category_type = "relief"
     db.commit()
 
 
@@ -233,13 +238,10 @@ def ensure_monthly_dues_for_family(db: Session, family: Family, up_to: Optional[
     settings = get_settings(db)
 
     masavari = get_category_by_slug(db, "masavari")
-    drf = get_category_by_slug(db, "drf")
 
     monthly_categories = []
     if masavari and masavari.is_active:
         monthly_categories.append(masavari)
-    if drf and drf.is_active and settings.drf_is_monthly:
-        monthly_categories.append(drf)
 
     for category in monthly_categories:
         for year, month in _iter_months(start, up_to):
@@ -298,6 +300,78 @@ def ensure_all_monthly_dues(db: Session, up_to: Optional[date] = None) -> None:
     families = db.query(Family).filter(Family.is_deleted.is_(False), Family.status == "Active").all()
     for family in families:
         ensure_monthly_dues_for_family(db, family, up_to)
+
+
+def _annual_drf_start_year(family: Family) -> int:
+    return _family_start_date(family).year
+
+
+def ensure_annual_drf_for_family(db: Session, family: Family, up_to: Optional[date] = None) -> None:
+    """Generate one annual DRF due per calendar year from joining year through up_to year.
+
+    Uses billing_month=0 as the annual marker. Existing dues are never modified (immutable amounts).
+    """
+    if family.status != "Active" or family.is_deleted:
+        return
+
+    drf = get_category_by_slug(db, "drf")
+    if not drf or not drf.is_active:
+        return
+
+    up_to = up_to or date.today()
+    start_year = _annual_drf_start_year(family)
+    end_year = up_to.year
+
+    created_any = False
+    for year in range(start_year, end_year + 1):
+        exists = (
+            db.query(FamilyDue)
+            .filter(
+                FamilyDue.family_id == family.id,
+                FamilyDue.category_id == drf.id,
+                FamilyDue.billing_year == year,
+                FamilyDue.billing_month == 0,
+                FamilyDue.festival_charge_event_id.is_(None),
+                FamilyDue.is_deleted.is_(False),
+            )
+            .first()
+        )
+        if exists:
+            continue
+
+        amount, rate_id = get_rate_record_for_date(db, drf, date(year, 1, 1))
+        if amount <= 0:
+            continue
+
+        due = FamilyDue(
+            family_id=family.id,
+            category_id=drf.id,
+            billing_month=0,
+            billing_year=year,
+            amount_due=amount,
+            amount_paid=0.0,
+            contribution_rate_id=rate_id,
+            status="pending",
+        )
+        nested = db.begin_nested()
+        try:
+            db.add(due)
+            db.flush()
+            record_due_ledger(db, due, drf)
+            nested.commit()
+            created_any = True
+        except IntegrityError:
+            nested.rollback()
+
+    if created_any:
+        rebuild_ledger_balances(db, family.id, drf.id, commit=False)
+    db.commit()
+
+
+def ensure_all_annual_drf_dues(db: Session, up_to: Optional[date] = None) -> None:
+    families = db.query(Family).filter(Family.is_deleted.is_(False), Family.status == "Active").all()
+    for family in families:
+        ensure_annual_drf_for_family(db, family, up_to)
 
 
 def ensure_festival_due(db: Session, family: Family, category: ContributionCategory, year: int) -> Optional[FamilyDue]:
@@ -389,6 +463,12 @@ def apply_payment_fifo(
             ensure_monthly_dues_for_family(db, family, up_to=payment.payment_date)
             unpaid = get_unpaid_dues(db, payment.family_id, payment.category_id)
 
+    if not unpaid and category.slug == "drf":
+        family = db.query(Family).filter(Family.id == payment.family_id).first()
+        if family:
+            ensure_annual_drf_for_family(db, family, up_to=payment.payment_date)
+            unpaid = get_unpaid_dues(db, payment.family_id, payment.category_id)
+
     if not unpaid:
         if amount > 0:
             raise ValueError("No outstanding dues found for this category")
@@ -410,6 +490,8 @@ def apply_payment_fifo(
             fest = db.query(FestivalChargeEvent).filter(FestivalChargeEvent.id == due.festival_charge_event_id).first()
             if fest:
                 pay_label = fest.name
+        elif due.billing_month == 0:
+            pay_label = f"{category.name} {due.billing_year}"
         elif due.billing_month:
             pay_label = f"{category.name} {due.billing_month:02d}/{due.billing_year}"
 
@@ -485,13 +567,18 @@ def generate_receipt_number(db: Session, settings: ContributionSetting) -> str:
 
 def record_due_ledger(db: Session, due: FamilyDue, category: ContributionCategory) -> None:
     """Create debit ledger entry when a due is generated."""
-    month_label = f"{due.billing_month:02d}/{due.billing_year}" if due.billing_month else str(due.billing_year)
+    if due.billing_month == 0:
+        period_label = str(due.billing_year)
+        entry_date = date(due.billing_year, 1, 1)
+    else:
+        period_label = f"{due.billing_month:02d}/{due.billing_year}"
+        entry_date = date(due.billing_year, due.billing_month, 1)
     db.add(
         LedgerEntry(
             family_id=due.family_id,
             category_id=due.category_id,
-            entry_date=date(due.billing_year, due.billing_month or 1, 1),
-            description=f"Due generated — {category.name} {month_label}",
+            entry_date=entry_date,
+            description=f"Due generated — {category.name} {period_label}",
             debit=due.amount_due,
             credit=0.0,
             balance=0.0,
@@ -503,10 +590,9 @@ def record_due_ledger(db: Session, due: FamilyDue, category: ContributionCategor
 def compute_family_outstanding(db: Session, family: Family, *, ensure_monthly: bool = True) -> dict:
     if ensure_monthly:
         ensure_monthly_dues_for_family(db, family)
-    settings = get_settings(db)
     drf_cat = get_category_by_slug(db, "drf")
-    if drf_cat and not settings.drf_is_monthly:
-        ensure_festival_due(db, family, drf_cat, date.today().year)
+    if drf_cat:
+        ensure_annual_drf_for_family(db, family)
 
     dues = (
         db.query(FamilyDue)
@@ -662,13 +748,20 @@ def get_family_detail(db: Session, family_id: str) -> dict:
 
     ensure_monthly_dues_for_family(db, family)
     outstanding = compute_family_outstanding(db, family, ensure_monthly=False)
+    today = date.today()
 
     masavari = get_category_by_slug(db, "masavari")
     monthly_status = []
     if masavari:
         dues = (
             db.query(FamilyDue)
-            .filter(FamilyDue.family_id == family_id, FamilyDue.category_id == masavari.id, FamilyDue.is_deleted.is_(False))
+            .filter(
+                FamilyDue.family_id == family_id,
+                FamilyDue.category_id == masavari.id,
+                FamilyDue.billing_month > 0,
+                FamilyDue.billing_month <= 12,
+                FamilyDue.is_deleted.is_(False),
+            )
             .order_by(FamilyDue.billing_year.desc(), FamilyDue.billing_month.desc())
             .limit(12)
             .all()
@@ -683,6 +776,32 @@ def get_family_detail(db: Session, family_id: str) -> dict:
                 "status": due.status,
             })
 
+    drf = get_category_by_slug(db, "drf")
+    drf_annual_status = []
+    if drf:
+        drf_dues = (
+            db.query(FamilyDue)
+            .filter(
+                FamilyDue.family_id == family_id,
+                FamilyDue.category_id == drf.id,
+                FamilyDue.billing_month == 0,
+                FamilyDue.festival_charge_event_id.is_(None),
+                FamilyDue.is_deleted.is_(False),
+            )
+            .order_by(FamilyDue.billing_year.asc())
+            .all()
+        )
+        for due in drf_dues:
+            balance = due_balance(due, today)
+            drf_annual_status.append({
+                "year": due.billing_year,
+                "label": str(due.billing_year),
+                "amount_due": due.amount_due,
+                "amount_paid": due.amount_paid,
+                "balance": balance,
+                "status": due.status,
+            })
+
     timeline = (
         db.query(FamilyDue)
         .join(ContributionCategory)
@@ -691,7 +810,6 @@ def get_family_detail(db: Session, family_id: str) -> dict:
         .all()
     )
     outstanding_timeline = []
-    today = date.today()
     for due in timeline:
         balance = due_balance(due, today)
         if balance <= 0:
@@ -702,6 +820,8 @@ def get_family_detail(db: Session, family_id: str) -> dict:
             fest = db.query(FestivalChargeEvent).filter(FestivalChargeEvent.id == due.festival_charge_event_id).first()
             if fest:
                 label = f"{fest.name} ({cat.name if cat else 'Festival'})"
+        elif cat and cat.slug == "drf" and due.billing_month == 0:
+            label = f"DRF {due.billing_year}"
         outstanding_timeline.append({
             "category": label,
             "billing_month": due.billing_month,
@@ -737,6 +857,7 @@ def get_family_detail(db: Session, family_id: str) -> dict:
         },
         "outstanding": outstanding,
         "monthly_status": monthly_status,
+        "drf_annual_status": drf_annual_status,
         "outstanding_timeline": outstanding_timeline,
         "recent_payments": [
             {
@@ -831,13 +952,9 @@ def sync_settings_rates(db: Session, settings: ContributionSetting) -> None:
 
 
 def ensure_family_all_dues(db: Session, family: Family) -> None:
-    """Generate monthly dues and annual DRF (if configured). Festival charges are admin-triggered."""
+    """Generate monthly Masavari dues and annual DRF. Festival charges are admin-triggered."""
     ensure_monthly_dues_for_family(db, family)
-    settings = get_settings(db)
-    year = date.today().year
-    drf_cat = get_category_by_slug(db, "drf")
-    if drf_cat and not settings.drf_is_monthly:
-        ensure_festival_due(db, family, drf_cat, year)
+    ensure_annual_drf_for_family(db, family)
 
 
 # ── Family display names ───────────────────────────────────────────────────
