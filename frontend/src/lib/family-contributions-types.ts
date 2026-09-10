@@ -169,6 +169,14 @@ export type FamilyDetail = {
     amount_paid: number
     status: string
   }>
+  drf_annual_status?: Array<{
+    year: number
+    label: string
+    amount_due: number
+    amount_paid: number
+    balance: number
+    status: string
+  }>
   outstanding_timeline: Array<{
     category: string
     billing_month: number

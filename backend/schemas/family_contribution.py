@@ -50,7 +50,7 @@ class ContributionSettingBase(BaseModel):
     festival_2_minimum: float = 0.0
     festival_3_minimum: float = 0.0
     drf_amount: float = 0.0
-    drf_is_monthly: bool = True
+    drf_is_monthly: bool = False  # deprecated — DRF is always annual
     partial_payment_allowed: bool = True
     financial_year: str = "2026-2027"
     receipt_prefix: str = "RCPT"
@@ -202,6 +202,15 @@ class MonthlyStatusItem(BaseModel):
     status: str
 
 
+class DrfAnnualStatusItem(BaseModel):
+    year: int
+    label: str
+    amount_due: float
+    amount_paid: float
+    balance: float
+    status: str
+
+
 class OutstandingTimelineItem(BaseModel):
     category: str
     billing_month: int
@@ -216,6 +225,7 @@ class FamilyDetailOut(BaseModel):
     family: FamilyOut
     outstanding: OutstandingFamilyOut
     monthly_status: List[MonthlyStatusItem]
+    drf_annual_status: List[DrfAnnualStatusItem] = Field(default_factory=list)
     outstanding_timeline: List[OutstandingTimelineItem]
     recent_payments: List[dict]
 

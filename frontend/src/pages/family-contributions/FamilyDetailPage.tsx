@@ -32,7 +32,7 @@ export default function FamilyDetailPage() {
 
   if (!detail) return <p className="text-muted-foreground">Family not found.</p>
 
-  const { family, outstanding, monthly_status, outstanding_timeline, recent_payments } = detail
+  const { family, outstanding, monthly_status, drf_annual_status = [], outstanding_timeline, recent_payments } = detail
 
   return (
     <div className="space-y-6">
@@ -88,6 +88,21 @@ export default function FamilyDetailPage() {
           ))}
         </div>
       </div>
+
+      {(outstanding.drf_outstanding > 0 || drf_annual_status.length > 0) && (
+        <div className="rounded-2xl border border-blue-500/30 bg-blue-500/5 p-4 shadow-sm">
+          <p className="text-sm font-medium text-blue-800">DRF Outstanding (Annual)</p>
+          <p className="mt-1 text-3xl font-bold text-blue-900">{formatCurrency(outstanding.drf_outstanding)}</p>
+          <div className="mt-3 space-y-1">
+            {drf_annual_status.filter((d) => d.balance > 0).map((d) => (
+              <div key={d.year} className="flex justify-between rounded-lg border border-blue-500/20 bg-background/50 px-3 py-2 text-sm">
+                <span>{d.year}</span>
+                <span className="font-medium">{formatCurrency(d.balance)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
