@@ -54,6 +54,7 @@ export default function ContributionsPage() {
   const [outstandingLoading, setOutstandingLoading] = useState(false)
   const [familyCache, setFamilyCache] = useState<Record<string, Family>>({})
   const [amountError, setAmountError] = useState("")
+  const [familyDropdownOpen, setFamilyDropdownOpen] = useState(false)
 
   const rememberFamily = (family?: Family) => {
     if (!family) return
@@ -245,16 +246,17 @@ export default function ContributionsPage() {
         : "Outstanding"
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-      <form onSubmit={submit} className="h-fit rounded-xl border border-border bg-card p-5 shadow-sm">
+    <div className="grid gap-6 overflow-visible xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+      <form onSubmit={submit} className="h-fit overflow-visible rounded-xl border border-border bg-card p-5 shadow-sm">
         <h2 className="text-base font-semibold tracking-tight">Record Payment</h2>
         <p className="mt-1 text-xs text-muted-foreground">Enter payment details for the selected family and category.</p>
 
-        <div className="mt-5 space-y-4">
-          <div className="space-y-1.5">
+        <div className="mt-5 space-y-4 overflow-visible">
+          <div className={`relative space-y-1.5 ${familyDropdownOpen ? "z-[100]" : ""}`}>
             <FieldLabel>Family</FieldLabel>
             <FamilySearchSelect
               value={form.family_id}
+              onOpenChange={setFamilyDropdownOpen}
               onChange={(familyId, family) => {
                 rememberFamily(family)
                 setCategoryOutstanding(null)
@@ -265,6 +267,7 @@ export default function ContributionsPage() {
             />
           </div>
 
+          <div className={familyDropdownOpen ? "pointer-events-none space-y-4 opacity-30" : "space-y-4"}>
           <div className="space-y-1.5">
             <FieldLabel htmlFor="payment-category">Category</FieldLabel>
             <select
@@ -421,6 +424,7 @@ export default function ContributionsPage() {
               rows={3}
               className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
+          </div>
           </div>
         </div>
 

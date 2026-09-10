@@ -1009,10 +1009,16 @@ def normalize_family_labels(db: Session) -> None:
     if not needs_rename:
         return
 
+    for family in families:
+        family._temp_old_number = family.family_number
+        family.family_number = f"TEMP_{family.id}"
+    db.flush()
+
     for index, family in enumerate(families, start=1):
         label = f"Family {index}"
-        old_number = family.family_number
+        old_number = family._temp_old_number
         family.family_number = label
         if _is_generic_head(family.head_of_family, old_number):
             family.head_of_family = label
+        del family._temp_old_number
     db.commit()
