@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { Download, Plus, Printer, Search, Trash2 } from "lucide-react"
+import { Download, Plus, Printer, Search, Trash2, X } from "lucide-react"
 import { Link } from "react-router-dom"
 import * as XLSX from "xlsx"
 import { fcApi } from "@/lib/family-contributions-api"
@@ -9,19 +9,20 @@ import { formatCategoryOptionLabel, formatFamilyOption, getCategoryConfiguredAmo
 import { ConfirmDialog } from "@/components/family-contributions/ConfirmDialog"
 import { FamilySearchSelect } from "@/components/family-contributions/FamilySearchSelect"
 import { useToast } from "@/components/family-contributions/Toast"
+import { getLocalDateString } from "@/lib/date-utils"
 
 const PAYMENT_MODES = ["Cash", "UPI", "Cheque", "Bank Transfer", "Card"]
 
-const emptyForm = {
+const emptyForm = () => ({
   family_id: "",
   category_id: "",
   amount: "",
-  payment_date: new Date().toISOString().slice(0, 10),
+  payment_date: getLocalDateString(),
   payment_mode: "Cash",
   reference_number: "",
   remarks: "",
   collected_by: "",
-}
+})
 
 function formatPaymentDate(value: string) {
   const date = new Date(`${value}T00:00:00`)
@@ -94,7 +95,12 @@ export default function ContributionsPage() {
     }
   }
 
-  useEffect(() => { load() }, [registerSearch])
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      load()
+    }, 250)
+    return () => clearTimeout(timer)
+  }, [registerSearch])
 
   useEffect(() => {
     if (!form.family_id) {
@@ -183,11 +189,11 @@ export default function ContributionsPage() {
 
     setSubmitting(true)
     try {
-      const payment = await fcApi.createPayment({ ...form, amount })
+      const payment = await fcApi.createPayment({ ...form, amount, payment_date: getLocalDateString() })
       setLastReceipt(payment)
       setAmountError("")
       toast("success", `Payment recorded — ${payment.receipt_number}`)
-      setForm({ ...emptyForm, family_id: form.family_id, category_id: form.category_id })
+      setForm({ ...emptyForm(), family_id: form.family_id, category_id: form.category_id })
       load()
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to record payment"
@@ -373,10 +379,12 @@ export default function ContributionsPage() {
                 id="payment-date"
                 type="date"
                 required
+                readOnly
+                disabled
                 value={form.payment_date}
-                onChange={(event) => setForm({ ...form, payment_date: event.target.value })}
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="w-full cursor-not-allowed rounded-lg border border-border bg-muted/60 px-3 py-2 text-sm text-muted-foreground"
               />
+              <p className="text-xs text-muted-foreground">Locked to today</p>
             </div>
           </div>
 
@@ -460,15 +468,26 @@ export default function ContributionsPage() {
             <p className="mt-0.5 text-xs text-muted-foreground">Showing {payments.length} of {paymentTotal}</p>
           </div>
           <div className="flex gap-2">
-            <label className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-sm">
-              <Search className="h-4 w-4 text-muted-foreground" />
+            <label className="relative flex items-center rounded-lg border border-border bg-background px-3 py-1.5 text-sm">
+              <Search className="h-4 w-4 text-muted-foreground mr-2 shrink-0 pointer-events-none" />
               <span className="sr-only">Search payments</span>
               <input
                 value={registerSearch}
                 onChange={(event) => setRegisterSearch(event.target.value)}
                 placeholder="Search register…"
-                className="w-32 bg-transparent outline-none sm:w-40"
+                className="w-32 bg-transparent outline-none sm:w-40 pr-5"
               />
+              {registerSearch && (
+                <button
+                  type="button"
+                  onClick={() => setRegisterSearch("")}
+                  className="absolute right-2 text-muted-foreground hover:text-foreground cursor-pointer"
+                  title="Clear search"
+                  aria-label="Clear search"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
             </label>
             <button
               type="button"

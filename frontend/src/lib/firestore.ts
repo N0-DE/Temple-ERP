@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core"
+import { getLockedNow } from "./date-utils"
 
 export type Pooja = { id?: string; name: string; description: string; amount: number; duration_minutes: number; category: string }
 export type Booking = { id?: string; devoteeName: string; phoneNumber: string; address: string; star: string; nakshatra: string; date: string; time: string; remarks: string; poojaName: string; amount: number; paymentMode: string; status: "Paid" | "Pending"; createdAt?: number; isAdvanceBooking?: boolean }
@@ -50,7 +51,11 @@ export const addBooking = async (booking: Omit<Booking, "id">): Promise<Booking>
   const existing = read<Booking[]>(KEYS.bookings, [])
   const numericIds = existing.map(b => parseInt(b.id || "0", 10)).filter(n => !isNaN(n) && n > 0)
   const nextNum = numericIds.length > 0 ? Math.max(...numericIds) + 1 : existing.length + 1
-  const local = { id: String(nextNum), ...booking, status: "Paid" as const, createdAt: Date.now() }
+  const now = getLockedNow()
+  const stamped = booking.isAdvanceBooking
+    ? { ...booking, date: booking.date < now.date ? now.date : booking.date }
+    : { ...booking, ...now }
+  const local = { id: String(nextNum), ...stamped, status: "Paid" as const, createdAt: Date.now() }
   const saved = isTauri() ? await invoke<Booking>("db_save_booking", { booking: toDb(local) }) : local
   if (isTauri()) changed()
   if (!isTauri()) write(KEYS.bookings, [saved, ...existing]); return saved

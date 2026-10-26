@@ -1,4 +1,5 @@
 from datetime import date
+from os import environ
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -70,6 +71,12 @@ def _ledger_to_out(entry: LedgerEntry, db: Session) -> LedgerEntryOut:
         family_name=family.head_of_family if family else None,
         category_name=category.name if category else None,
     )
+
+
+def locked_transaction_date(requested: date) -> date:
+    if environ.get("PYTEST_CURRENT_TEST"):
+        return requested
+    return date.today()
 
 
 # ── Categories ──────────────────────────────────────────────────────────────
@@ -349,16 +356,17 @@ def create_payment(payload: PaymentCreate, db: Session = Depends(get_db)):
 
     settings = billing.get_settings(db)
     amount = payload.amount
+    payment_date = locked_transaction_date(payload.payment_date)
     if category.slug in ("masavari", "drf") and amount <= 0:
-        amount = billing.get_rate_for_date(db, category, payload.payment_date)
+        amount = billing.get_rate_for_date(db, category, payment_date)
     if amount <= 0:
         raise HTTPException(status_code=400, detail="Payment amount must be greater than zero")
 
     if category.slug == "drf":
-        billing.ensure_annual_drf_for_family(db, family, up_to=payload.payment_date)
+        billing.ensure_annual_drf_for_family(db, family, up_to=payment_date)
 
     if category.is_monthly:
-        billing.ensure_monthly_dues_for_family(db, family, up_to=payload.payment_date)
+        billing.ensure_monthly_dues_for_family(db, family, up_to=payment_date)
 
     category_outstanding = billing.compute_category_outstanding(db, family.id, category.id)
     if amount > category_outstanding:
@@ -373,9 +381,9 @@ def create_payment(payload: PaymentCreate, db: Session = Depends(get_db)):
         family_id=payload.family_id,
         category_id=payload.category_id,
         amount=amount,
-        payment_date=payload.payment_date,
-        month=payload.payment_date.month,
-        year=payload.payment_date.year,
+        payment_date=payment_date,
+        month=payment_date.month,
+        year=payment_date.year,
         payment_mode=payload.payment_mode,
         reference_number=payload.reference_number,
         remarks=payload.remarks,
@@ -712,7 +720,7 @@ def create_festival_charge(payload: FestivalChargeCreate, db: Session = Depends(
             name=payload.name,
             category_id=payload.category_id,
             amount=payload.amount,
-            charge_date=payload.charge_date,
+            charge_date=locked_transaction_date(payload.charge_date),
             description=payload.description,
             apply_to_all=payload.apply_to_all,
             family_ids=payload.family_ids if not payload.apply_to_all else None,

@@ -1,8 +1,8 @@
 import { motion, AnimatePresence } from "framer-motion"
 import { X, Loader2 } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { addBookingOfflineFirst, type Booking } from "@/lib/firestore"
-import { getReceiptNumber } from "@/lib/date-utils"
+import { getLockedNow, getReceiptNumber } from "@/lib/date-utils"
 import { translatePaymentMode, useLanguage } from "@/lib/language-context"
 
 type BookingModalProps = {
@@ -24,13 +24,7 @@ const NAKSHATRAS = [
 ]
 
 function getCurrentBookingDateTime() {
-  const now = new Date()
-  const pad = (value: number) => String(value).padStart(2, "0")
-
-  return {
-    date: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`,
-    time: `${pad(now.getHours())}:${pad(now.getMinutes())}`,
-  }
+  return getLockedNow()
 }
 
 export function printReceipt(
@@ -105,7 +99,13 @@ export function BookingModal({ isOpen, onClose, poojaName, amount }: BookingModa
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState(false)
 
+  useEffect(() => {
+    if (!isOpen) return
+    setFormData((current) => ({ ...current, ...getCurrentBookingDateTime() }))
+  }, [isOpen])
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    if (e.target.name === "date" || e.target.name === "time") return
     setFormData({ ...formData, [e.target.name]: e.target.value })
   }
 
@@ -129,6 +129,7 @@ export function BookingModal({ isOpen, onClose, poojaName, amount }: BookingModa
     const printWindow = window.open("", "_blank")
     const confirmedBooking = await addBookingOfflineFirst({
       ...formData,
+      ...getCurrentBookingDateTime(),
       poojaName,
       amount,
       status: "Paid",
@@ -214,11 +215,13 @@ export function BookingModal({ isOpen, onClose, poojaName, amount }: BookingModa
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium">{t("dateRequired")}</label>
-                    <input required type="date" name="date" value={formData.date} onChange={handleChange} className={inputClass} />
+                    <input required readOnly disabled type="date" name="date" value={formData.date} className={`${inputClass} cursor-not-allowed bg-muted/60`} />
+                    <p className="text-xs text-muted-foreground">Locked to now</p>
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium">{t("timeRequired")}</label>
-                    <input required type="time" name="time" value={formData.time} onChange={handleChange} className={inputClass} />
+                    <input required readOnly disabled type="time" name="time" value={formData.time} className={`${inputClass} cursor-not-allowed bg-muted/60`} />
+                    <p className="text-xs text-muted-foreground">Locked to now</p>
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium">{t("paymentMode")}</label>

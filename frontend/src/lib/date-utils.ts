@@ -7,6 +7,17 @@ export function getLocalDateString(d: Date = new Date()): string {
   return `${year}-${month}-${day}`
 }
 
+export function getLocalTimeString(d: Date = new Date()): string {
+  const hours = String(d.getHours()).padStart(2, "0")
+  const minutes = String(d.getMinutes()).padStart(2, "0")
+  return `${hours}:${minutes}`
+}
+
+export function getLockedNow() {
+  const now = new Date()
+  return { date: getLocalDateString(now), time: getLocalTimeString(now) }
+}
+
 export function getOffsetDateString(daysOffset: number): string {
   const d = new Date()
   d.setDate(d.getDate() + daysOffset)

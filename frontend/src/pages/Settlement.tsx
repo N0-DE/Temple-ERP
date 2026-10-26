@@ -1,13 +1,15 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+import { useSearchParams } from "react-router-dom"
 import { motion } from "framer-motion"
 import {
   Search, Download, FileText, Printer,
-  TrendingUp, IndianRupee, CalendarDays, Clock, Loader2
+  TrendingUp, IndianRupee, CalendarDays, Clock, Loader2, X
 } from "lucide-react"
 import { type Booking } from "@/lib/firestore"
 import { useBookings } from "@/lib/bookings-context"
 import { printReceipt } from "@/components/BookingModal"
 import { getLocalDateString, getOffsetDateString, getReceiptNumber } from "@/lib/date-utils"
+import { matchesSearch } from "@/lib/search-utils"
 import { translateDateFilter, translatePaymentMode, useLanguage, type TranslationKey } from "@/lib/language-context"
 
 type FilterType = "All" | "Today" | "Yesterday" | "Weekly" | "Monthly"
@@ -124,6 +126,7 @@ function printTable(
 
 export default function Settlement() {
   const { t } = useLanguage()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { bookings, loading, hasMore, loadingMore, loadOlderBookings } = useBookings()
   const [search, setSearch] = useState("")
   const [activeFilter, setActiveFilter] = useState<FilterType>("All")
@@ -131,24 +134,32 @@ export default function Settlement() {
 
   const DATE_FILTERS: FilterType[] = ["All", "Today", "Yesterday", "Weekly", "Monthly"]
 
+  // Listen to search params (e.g. navigated from GlobalSearch with receipt=RCP-xxx or search=xxx)
+  useEffect(() => {
+    const receipt = searchParams.get("receipt")
+    const q = searchParams.get("search") || searchParams.get("q")
+    const term = receipt || q
+    if (term) {
+      setSearch(term)
+      setActiveFilter("All")
+      setSearchParams({}, { replace: true })
+    }
+  }, [searchParams, setSearchParams])
+
   const dateFiltered = filterByDate(bookings, activeFilter)
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
+    const q = search.trim()
     if (!q) return dateFiltered
 
-    return dateFiltered.filter((b, i) => {
-      const receiptNo = getReceiptNumber(b, i).toLowerCase()
-      return (
-        receiptNo.includes(q) ||
-        b.devoteeName.toLowerCase().includes(q) ||
-        b.poojaName.toLowerCase().includes(q) ||
-        (b.phoneNumber && b.phoneNumber.includes(q)) ||
-        b.paymentMode.toLowerCase().includes(q) ||
-        b.date.includes(q)
-      )
+    return dateFiltered.filter((b) => {
+      const stableIndex = bookings.indexOf(b)
+      const receiptNo = getReceiptNumber(b, stableIndex >= 0 ? stableIndex : 0)
+      const paymentTranslated = translatePaymentMode(t, b.paymentMode)
+      const haystack = `${receiptNo} ${b.devoteeName || ""} ${b.poojaName || ""} ${b.phoneNumber || ""} ${b.paymentMode || ""} ${paymentTranslated} ${b.star || ""} ${b.nakshatra || ""} ₹${b.amount || ""} ${b.amount || ""} ${b.date || ""} ${b.time || ""} ${b.remarks || ""}`
+      return matchesSearch(haystack, q)
     })
-  }, [dateFiltered, search])
+  }, [bookings, dateFiltered, search, t])
 
   const sorted = useMemo(() => [...filtered].sort((a, b) => {
     const aValue = a[sort.key]
@@ -257,16 +268,47 @@ export default function Settlement() {
         </div>
 
         <div className="flex-1 relative">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <input
             type="text"
             placeholder={t("searchSettlementPlaceholder")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="search-input"
+            className="search-input pr-10"
           />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+              title={t("clearSearch")}
+              aria-label={t("clearSearch")}
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
+
+      {(search || activeFilter !== "All") && (
+        <div className="flex items-center justify-between text-xs text-muted-foreground -mt-3 px-1">
+          <span>
+            {t("showingRecords", { shown: sorted.length, total: bookings.length })}
+            {sorted.length > 0 && ` · Total: ₹${sorted.reduce((sum, b) => sum + Number(b.amount || 0), 0).toLocaleString()}`}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setSearch("")
+              setActiveFilter("All")
+            }}
+            className="text-primary hover:underline font-medium inline-flex items-center gap-1 cursor-pointer"
+          >
+            <X className="w-3 h-3" />
+            {t("clearFilters")}
+          </button>
+        </div>
+      )}
 
       <div className="bg-card border border-border rounded-2xl shadow-sm overflow-hidden">
         {loading ? (
@@ -288,10 +330,11 @@ export default function Settlement() {
                 </tr>
               </thead>
               <tbody>
-                {sorted.map((b, i) => {
-                  const receiptNo = getReceiptNumber(b, i)
+                {sorted.map((b) => {
+                  const stableIdx = bookings.indexOf(b)
+                  const receiptNo = getReceiptNumber(b, stableIdx >= 0 ? stableIdx : 0)
                   return (
-                    <tr key={b.id ?? i} className="border-b border-border hover:bg-secondary/20 transition-colors">
+                    <tr key={b.id ?? receiptNo} className="border-b border-border hover:bg-secondary/20 transition-colors">
                       <td className="px-6 py-4 font-mono text-primary font-bold text-xs">
                         {receiptNo}
                       </td>
@@ -338,8 +381,25 @@ export default function Settlement() {
                 })}
                 {sorted.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-6 py-12 text-center text-muted-foreground">
-                      {t("noSettlementRecords")}
+                    <td colSpan={7} className="px-6 py-14 text-center text-muted-foreground">
+                      <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mx-auto mb-3 text-muted-foreground">
+                        <Search className="w-6 h-6" />
+                      </div>
+                      <p className="text-base font-semibold text-foreground">{t("noSettlementRecords")}</p>
+                      <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">{t("noMatchesSuggestion")}</p>
+                      {(search || activeFilter !== "All") && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSearch("")
+                            setActiveFilter("All")
+                          }}
+                          className="mt-4 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-sm inline-flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                          {t("resetFilters")}
+                        </button>
+                      )}
                     </td>
                   </tr>
                 )}
@@ -354,7 +414,7 @@ export default function Settlement() {
             <button
               onClick={() => void loadOlderBookings()}
               disabled={loadingMore}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border text-xs font-medium hover:bg-secondary transition-colors disabled:opacity-60"
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border text-xs font-medium hover:bg-secondary transition-colors disabled:opacity-60 cursor-pointer"
             >
               {loadingMore && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               {t("loadOlderRecords")}

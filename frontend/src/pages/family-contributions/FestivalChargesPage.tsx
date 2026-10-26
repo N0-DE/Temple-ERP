@@ -5,14 +5,15 @@ import type { Category, FestivalCharge, FestivalChargeApplyResult, FestivalCharg
 import { formatCurrency } from "@/lib/family-contributions-types"
 import { ConfirmDialog } from "@/components/family-contributions/ConfirmDialog"
 import { useToast } from "@/components/family-contributions/Toast"
+import { getLocalDateString } from "@/lib/date-utils"
 
-const emptyForm = {
+const emptyForm = () => ({
   name: "",
   category_id: "",
   amount: "",
-  charge_date: new Date().toISOString().slice(0, 10),
+  charge_date: getLocalDateString(),
   description: "",
-}
+})
 
 export default function FestivalChargesPage() {
   const { toast } = useToast()
@@ -64,12 +65,12 @@ export default function FestivalChargesPage() {
         name: form.name.trim(),
         category_id: form.category_id,
         amount: Number(form.amount),
-        charge_date: form.charge_date,
+        charge_date: getLocalDateString(),
         description: form.description,
         apply_to_all: true,
       })
       toast("success", "Festival charge created — ready to apply")
-      setForm(emptyForm)
+      setForm(emptyForm())
       setShowForm(false)
       await load()
       setSelected(created)
@@ -153,7 +154,8 @@ export default function FestivalChargesPage() {
             </label>
             <label className="text-sm">
               Date
-              <input type="date" value={form.charge_date} onChange={(e) => setForm({ ...form, charge_date: e.target.value })} className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2" />
+              <input type="date" readOnly disabled value={form.charge_date} className="mt-1 w-full cursor-not-allowed rounded-lg border border-border bg-muted/60 px-3 py-2 text-muted-foreground" />
+              <span className="mt-1 block text-xs text-muted-foreground">Locked to today</span>
             </label>
             <label className="col-span-full text-sm">
               Description / notes

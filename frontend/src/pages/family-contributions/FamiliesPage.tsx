@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
-import { Eye, Pencil, Plus, Search, Trash2 } from "lucide-react"
+import { Eye, Pencil, Plus, Search, Trash2, X } from "lucide-react"
 import { fcApi } from "@/lib/family-contributions-api"
 import type { Family } from "@/lib/family-contributions-types"
 import { useToast } from "@/components/family-contributions/Toast"
@@ -120,9 +120,14 @@ export default function FamiliesPage() {
         <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <h2 className="text-lg font-semibold">Family Directory</h2>
           <div className="flex flex-wrap gap-2">
-            <label className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm">
-              <Search className="h-4 w-4 text-muted-foreground" />
-              <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1) }} placeholder="Search..." className="w-36 bg-transparent outline-none" />
+            <label className="relative flex items-center rounded-lg border border-border bg-background px-3 py-2 text-sm">
+              <Search className="h-4 w-4 text-muted-foreground mr-2 shrink-0 pointer-events-none" />
+              <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1) }} placeholder="Search..." className="w-36 bg-transparent outline-none pr-5" />
+              {search && (
+                <button type="button" onClick={() => { setSearch(""); setPage(1) }} className="absolute right-2 text-muted-foreground hover:text-foreground cursor-pointer" title="Clear search">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
             </label>
             <select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1) }} className="rounded-lg border border-border bg-background px-3 py-2 text-sm">
               <option value="All">All</option>

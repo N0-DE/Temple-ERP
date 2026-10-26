@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
-import { Download, Search } from "lucide-react"
+import { Download, Search, X } from "lucide-react"
 import * as XLSX from "xlsx"
 import { fcApi } from "@/lib/family-contributions-api"
 import type { OutstandingFamily, OutstandingSummary } from "@/lib/family-contributions-types"
@@ -96,9 +96,14 @@ export default function OutstandingPage() {
             <p className="text-sm text-muted-foreground">{total} families with outstanding dues</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <label className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm">
-              <Search className="h-4 w-4 text-muted-foreground" />
-              <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1) }} placeholder="Search family..." className="w-32 bg-transparent outline-none" />
+            <label className="relative flex items-center rounded-lg border border-border bg-background px-3 py-2 text-sm">
+              <Search className="h-4 w-4 text-muted-foreground mr-2 shrink-0 pointer-events-none" />
+              <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1) }} placeholder="Search family..." className="w-32 bg-transparent outline-none pr-5" />
+              {search && (
+                <button type="button" onClick={() => { setSearch(""); setPage(1) }} className="absolute right-2 text-muted-foreground hover:text-foreground cursor-pointer" title="Clear search">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
             </label>
             <input value={ward} onChange={(e) => { setWard(e.target.value); setPage(1) }} placeholder="Ward" className="w-24 rounded-lg border border-border bg-background px-3 py-2 text-sm" />
             <select value={category} onChange={(e) => { setCategory(e.target.value); setPage(1) }} className="rounded-lg border border-border bg-background px-3 py-2 text-sm">

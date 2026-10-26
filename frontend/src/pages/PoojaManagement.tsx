@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from "react"
+import { useSearchParams } from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
 import { Plus, Search, Pencil, Trash2, X, Loader2 } from "lucide-react"
 import { addBookingOfflineFirst, deleteBooking, type Booking, type Pooja } from "@/lib/firestore"
 import { usePoojas } from "@/lib/poojas-context"
 import { useBookings } from "@/lib/bookings-context"
 import { BookingModal, printReceipt } from "@/components/BookingModal"
+import { getLocalDateString, getLockedNow, getOffsetDateString } from "@/lib/date-utils"
+import { matchesSearch } from "@/lib/search-utils"
 import { translateCategory, translatePaymentMode, useLanguage } from "@/lib/language-context"
 
 const CATEGORIES = ["All", "Homam", "General", "Special", "Festival"]
@@ -42,12 +45,7 @@ function isUpcomingAdvanceBooking(booking: Booking, now: number) {
 }
 
 function getCurrentBookingDateTime() {
-  const now = new Date()
-  const pad = (value: number) => String(value).padStart(2, "0")
-  return {
-    date: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`,
-    time: `${pad(now.getHours())}:${pad(now.getMinutes())}`,
-  }
+  return getLockedNow()
 }
 
 const emptyForm: PoojaFormData = {
@@ -184,6 +182,7 @@ function DeleteConfirm({ name, onCancel, onConfirm, loading }: { name: string; o
 
 export default function PoojaManagement() {
   const { t } = useLanguage()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { poojas, loading, addPoojaEntry, editPoojaEntry, removePoojaEntry } = usePoojas()
   const { bookings } = useBookings()
   const [search, setSearch] = useState("")
@@ -196,6 +195,8 @@ export default function PoojaManagement() {
   const [selectedPooja, setSelectedPooja] = useState<Pooja | null>(null)
   const [savingAdvance, setSavingAdvance] = useState(false)
   const [now, setNow] = useState(Date.now())
+  const [advanceSearch, setAdvanceSearch] = useState("")
+  const [advanceDateFilter, setAdvanceDateFilter] = useState<"All" | "Today" | "Tomorrow" | "ThisWeek">("All")
   const [advanceForm, setAdvanceForm] = useState<AdvanceBookingFormState>(() => ({
     devoteeName: "",
     phoneNumber: "",
@@ -207,27 +208,61 @@ export default function PoojaManagement() {
     quantity: 1,
   }))
 
-  const filtered = poojas.filter((p) => {
-    const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.category.toLowerCase().includes(search.toLowerCase())
-    const matchCat = activeCategory === "All" || p.category === activeCategory
-    return matchSearch && matchCat
-  })
+  // Handle URL query parameters (e.g. from GlobalSearch)
+  useEffect(() => {
+    const poojaId = searchParams.get("poojaId")
+    const action = searchParams.get("action")
+    const searchParam = searchParams.get("search")
+
+    if (poojaId && action === "book") {
+      const match = poojas.find((p) => p.id === poojaId)
+      if (match) {
+        setSelectedPooja(match)
+        setSearchParams({}, { replace: true })
+      }
+    } else if (searchParam) {
+      setSearch(searchParam)
+      setSearchParams({}, { replace: true })
+    }
+  }, [poojas, searchParams, setSearchParams])
+
+  const filtered = useMemo(() => {
+    return poojas.filter((p) => {
+      const catTranslated = translateCategory(t, p.category)
+      const haystack = `${p.name} ${p.category} ${catTranslated} ${p.description || ""} ₹${p.amount} ${p.duration_minutes} mins`
+      const matchSearch = matchesSearch(haystack, search)
+      const matchCat = activeCategory === "All" || p.category === activeCategory
+      return matchSearch && matchCat
+    })
+  }, [activeCategory, poojas, search, t])
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 60_000)
     return () => window.clearInterval(timer)
   }, [])
 
-  const upcomingAdvanceBookings = useMemo(() =>
-    bookings
+  const upcomingAdvanceBookings = useMemo(() => {
+    const today = getLocalDateString()
+    const tomorrow = getOffsetDateString(1)
+    const weekEnd = getOffsetDateString(7)
+
+    return bookings
       .filter((booking) => booking.isAdvanceBooking && isUpcomingAdvanceBooking(booking, now))
+      .filter((booking) => {
+        if (advanceDateFilter === "Today" && booking.date !== today) return false
+        if (advanceDateFilter === "Tomorrow" && booking.date !== tomorrow) return false
+        if (advanceDateFilter === "ThisWeek" && (booking.date < today || booking.date > weekEnd)) return false
+
+        if (!advanceSearch.trim()) return true
+        const haystack = `${booking.devoteeName || ""} ${booking.phoneNumber || ""} ${booking.poojaName || ""} ${booking.paymentMode || ""} ${booking.date || ""} ${booking.time || ""} ${booking.address || ""} ${booking.remarks || ""}`
+        return matchesSearch(haystack, advanceSearch)
+      })
       .sort((a, b) => {
         const aTime = new Date(`${a.date}T${a.time}`).getTime()
         const bTime = new Date(`${b.date}T${b.time}`).getTime()
         return aTime - bTime
-      }),
-    [bookings, now],
-  )
+      })
+  }, [advanceDateFilter, advanceSearch, bookings, now])
 
   const handleAdd = async (data: PoojaFormData) => {
     await addPoojaEntry(data)
@@ -251,6 +286,9 @@ export default function PoojaManagement() {
     const selectedPooja = poojas.find((pooja) => pooja.id === advanceForm.poojaId)
     if (!selectedPooja) return
 
+    const today = getLocalDateString()
+    if (advanceForm.date < today) return
+
     const quantity = Math.max(1, Number(advanceForm.quantity) || 1)
 
     setSavingAdvance(true)
@@ -262,7 +300,7 @@ export default function PoojaManagement() {
           address: advanceForm.address.trim(),
           star: "",
           nakshatra: "",
-          date: advanceForm.date,
+          date: advanceForm.date < today ? today : advanceForm.date,
           time: advanceForm.time,
           remarks: advanceForm.remarks.trim(),
           poojaName: selectedPooja.name,
@@ -290,7 +328,10 @@ export default function PoojaManagement() {
 
   const handleAdvanceChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target
-    setAdvanceForm((prev) => ({ ...prev, [name]: name === "quantity" ? Number(value) : value }))
+    setAdvanceForm((prev) => {
+      if (name === "date" && value < getLocalDateString()) return prev
+      return { ...prev, [name]: name === "quantity" ? Number(value) : value }
+    })
   }
 
   const handleCompleteAdvanceBooking = async (booking?: Booking) => {
@@ -359,14 +400,25 @@ export default function PoojaManagement() {
         {activeTab === "poojas" ? (
           <div className="relative flex-1 flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
               <input
                 type="text"
                 placeholder={t("searchPoojaPlaceholder")}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="search-input"
+                className="search-input pr-10"
               />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                  title={t("clearSearch")}
+                  aria-label={t("clearSearch")}
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
             <div className="flex items-center gap-1 bg-secondary/50 p-1 rounded-xl flex-wrap">
               {CATEGORIES.map((cat) => (
@@ -398,6 +450,23 @@ export default function PoojaManagement() {
           </button>
         </div>
       </div>
+
+      {activeTab === "poojas" && (search || activeCategory !== "All") && (
+        <div className="flex items-center justify-between text-xs text-muted-foreground -mt-3 px-1">
+          <span>{t("showingPoojasCount", { count: filtered.length, total: poojas.length })}</span>
+          <button
+            type="button"
+            onClick={() => {
+              setSearch("")
+              setActiveCategory("All")
+            }}
+            className="text-primary hover:underline font-medium inline-flex items-center gap-1 cursor-pointer"
+          >
+            <X className="w-3 h-3" />
+            {t("clearFilters")}
+          </button>
+        </div>
+      )}
 
       {activeTab === "advance-bookings" ? (
         <div className="grid grid-cols-1 xl:grid-cols-[1.05fr_0.95fr] gap-6">
@@ -433,7 +502,7 @@ export default function PoojaManagement() {
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium">{t("scheduledDate")}</label>
-                  <input required type="date" name="date" value={advanceForm.date} onChange={handleAdvanceChange} className="w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20" />
+                  <input required type="date" name="date" min={getLocalDateString()} value={advanceForm.date} onChange={handleAdvanceChange} className="w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20" />
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium">{t("scheduledTime")}</label>
@@ -463,27 +532,93 @@ export default function PoojaManagement() {
             </form>
           </div>
 
-          <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
+          <div className="bg-card border border-border rounded-2xl p-6 shadow-sm flex flex-col">
+            <div className="flex items-center justify-between mb-3">
               <div>
                 <h2 className="text-lg font-semibold">{t("advanceBooking")}</h2>
-                <p className="text-sm text-muted-foreground">{t("advanceBookingSubtitle")}</p>
+                <p className="text-xs text-muted-foreground">{t("advanceBookingSubtitle")}</p>
               </div>
             </div>
+
+            {/* Advance Bookings Search and Quick Filters */}
+            <div className="space-y-2 mb-4">
+              <div className="relative">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder={t("searchAdvancePlaceholder")}
+                  value={advanceSearch}
+                  onChange={(e) => setAdvanceSearch(e.target.value)}
+                  className="w-full bg-muted/70 border border-border text-foreground placeholder:text-muted-foreground rounded-xl pl-9 pr-9 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                />
+                {advanceSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setAdvanceSearch("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-md text-muted-foreground hover:text-foreground"
+                    title={t("clearSearch")}
+                    aria-label={t("clearSearch")}
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-1.5 overflow-x-auto text-xs py-0.5">
+                {(["All", "Today", "Tomorrow", "ThisWeek"] as const).map((filterKey) => {
+                  const isActive = advanceDateFilter === filterKey
+                  const label =
+                    filterKey === "All"
+                      ? t("filterAll")
+                      : filterKey === "Today"
+                      ? t("filterToday")
+                      : filterKey === "Tomorrow"
+                      ? t("filterTomorrow")
+                      : t("filterThisWeek")
+                  return (
+                    <button
+                      key={filterKey}
+                      type="button"
+                      onClick={() => setAdvanceDateFilter(filterKey)}
+                      className={`px-2.5 py-1 rounded-lg font-medium transition-all text-xs shrink-0 ${
+                        isActive
+                          ? "bg-primary text-primary-foreground shadow-xs"
+                          : "bg-secondary text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
             {upcomingAdvanceBookings.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-border py-10 text-center text-sm text-muted-foreground">
-                {t("noAdvanceBookings")}
+              <div className="rounded-xl border border-dashed border-border py-10 px-4 text-center text-sm text-muted-foreground">
+                <p>{advanceSearch || advanceDateFilter !== "All" ? t("noAdvanceMatch") : t("noAdvanceBookings")}</p>
+                {(advanceSearch || advanceDateFilter !== "All") && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAdvanceSearch("")
+                      setAdvanceDateFilter("All")
+                    }}
+                    className="mt-3 px-3 py-1.5 rounded-lg bg-secondary hover:bg-secondary/80 text-xs font-medium text-foreground transition-colors inline-flex items-center gap-1 shadow-xs cursor-pointer"
+                  >
+                    <X className="w-3 h-3" />
+                    {t("clearFilters")}
+                  </button>
+                )}
               </div>
             ) : (
               <div className="space-y-3">
                 {upcomingAdvanceBookings.map((booking) => (
-                  <div key={booking.id} className="rounded-xl border border-border/80 bg-background/70 p-4">
+                  <div key={booking.id} className="rounded-xl border border-border/80 bg-background/70 p-4 hover:border-primary/30 transition-colors">
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="font-semibold">{booking.devoteeName}</p>
                         <p className="text-sm text-muted-foreground">{booking.poojaName}</p>
                       </div>
-                      <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                      <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground cursor-pointer">
                         <input type="checkbox" className="h-4 w-4 rounded border-border text-primary focus:ring-primary" onChange={() => void handleCompleteAdvanceBooking(booking)} />
                         Done
                       </label>
@@ -506,9 +641,25 @@ export default function PoojaManagement() {
           <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-20 text-muted-foreground">
-          <p className="text-lg font-medium">{t("noPoojasFound")}</p>
-          <p className="text-sm mt-1">{t("tryDifferentSearch")}</p>
+        <div className="text-center py-16 text-muted-foreground bg-card/60 rounded-2xl border border-dashed border-border p-8">
+          <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mx-auto mb-3 text-muted-foreground">
+            <Search className="w-6 h-6" />
+          </div>
+          <p className="text-base font-semibold text-foreground">{t("noPoojasFound")}</p>
+          <p className="text-sm mt-1 max-w-sm mx-auto">{t("tryDifferentSearch")}</p>
+          {(search || activeCategory !== "All") && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearch("")
+                setActiveCategory("All")
+              }}
+              className="mt-4 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-sm inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+              {t("resetFilters")}
+            </button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
