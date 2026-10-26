@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { Download, Plus, Printer, Search, Trash2, X } from "lucide-react"
-import { Link } from "react-router-dom"
+import { Link, useSearchParams } from "react-router-dom"
 import * as XLSX from "xlsx"
 import { fcApi } from "@/lib/family-contributions-api"
 import type { Category, CategoryOutstanding, Family, FamilyDetail, Payment, Settings } from "@/lib/family-contributions-types"
@@ -40,6 +40,8 @@ function FieldLabel({ htmlFor, children }: { htmlFor?: string; children: React.R
 
 export default function ContributionsPage() {
   const { toast } = useToast()
+  const [searchParams] = useSearchParams()
+  const preselectedFamilyId = searchParams.get("familyId")
   const [categories, setCategories] = useState<Category[]>([])
   const [settings, setSettings] = useState<Settings | null>(null)
   const [payments, setPayments] = useState<Payment[]>([])
@@ -56,6 +58,12 @@ export default function ContributionsPage() {
   const [familyCache, setFamilyCache] = useState<Record<string, Family>>({})
   const [amountError, setAmountError] = useState("")
   const [familyDropdownOpen, setFamilyDropdownOpen] = useState(false)
+
+  useEffect(() => {
+    if (preselectedFamilyId) {
+      setForm((prev) => ({ ...prev, family_id: preselectedFamilyId }))
+    }
+  }, [preselectedFamilyId])
 
   const rememberFamily = (family?: Family) => {
     if (!family) return

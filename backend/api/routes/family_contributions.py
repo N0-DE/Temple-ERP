@@ -179,15 +179,19 @@ def read_families(
     if not include_deleted:
         query = query.filter(Family.is_deleted.is_(False))
     if search:
-        term = f"%{search}%"
-        query = query.filter(
-            or_(
-                Family.head_of_family.ilike(term),
-                Family.family_number.ilike(term),
-                Family.house_name.ilike(term),
-                Family.phone.ilike(term),
+        tokens = search.strip().split()
+        for token in tokens:
+            term = f"%{token}%"
+            query = query.filter(
+                or_(
+                    Family.head_of_family.ilike(term),
+                    Family.family_number.ilike(term),
+                    Family.house_name.ilike(term),
+                    Family.phone.ilike(term),
+                    Family.ward.ilike(term),
+                    Family.address.ilike(term),
+                )
             )
-        )
     if status and status != "All":
         query = query.filter(Family.status == status)
     if ward:

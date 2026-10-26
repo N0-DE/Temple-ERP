@@ -17,6 +17,7 @@ import {
   AlertTriangle,
   BarChart3,
   Settings,
+  Sparkles,
 } from "lucide-react"
 
 type SidebarProps = {
@@ -34,6 +35,7 @@ const fcSubItems = [
   { label: "Families", icon: Users, path: "/family-contributions/families" },
   { label: "Contributions", icon: Wallet, path: "/family-contributions/contributions" },
   { label: "Outstanding Dues", icon: AlertTriangle, path: "/family-contributions/outstanding" },
+  { label: "Festival Charges", icon: Sparkles, path: "/family-contributions/festival-charges" },
   { label: "Reports", icon: BarChart3, path: "/family-contributions/reports" },
   { label: "Settings", icon: Settings, path: "/family-contributions/settings" },
 ]
@@ -93,7 +95,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
         {/* Family Contributions section */}
         <div className="mt-2">
           <Link
-            to="/family-contributions/outstanding"
+            to="/family-contributions/families"
             className={cn(
               "flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200",
               isFcActive ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:bg-secondary hover:text-foreground",
