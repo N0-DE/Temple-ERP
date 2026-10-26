@@ -168,15 +168,19 @@ function ReportTable({ title, rows }: { title: string; rows: Array<Record<string
       <table className="min-w-full text-sm">
         <thead><tr className="border-b text-left text-muted-foreground"><th className="py-1">Family</th><th>Ward</th><th>Paid</th><th>Due</th><th>Status</th></tr></thead>
         <tbody>
-          {rows.map((r, i) => (
-            <tr key={i} className="border-b border-border/60">
-              <td className="py-1">{formatFamilyOption({ family_number: String(r.family_number ?? r.family_name), family_name: String(r.family_name) })}</td>
-              <td>{String(r.ward)}</td>
-              <td>{formatCurrency(Number(r.paid_amount))}</td>
-              <td>{formatCurrency(Number(r.balance_due))}</td>
-              <td>{String(r.status)}</td>
-            </tr>
-          ))}
+          {rows.length === 0 ? (
+            <tr><td colSpan={5} className="py-6 text-center text-xs text-muted-foreground">No families in this status</td></tr>
+          ) : (
+            rows.map((r, i) => (
+              <tr key={i} className="border-b border-border/60">
+                <td className="py-1">{formatFamilyOption({ family_number: String(r.family_number ?? r.family_name), family_name: String(r.family_name) })}</td>
+                <td>{String(r.ward || "—")}</td>
+                <td>{formatCurrency(Number(r.paid_amount))}</td>
+                <td>{formatCurrency(Number(r.balance_due))}</td>
+                <td>{String(r.status)}</td>
+              </tr>
+            ))
+          )}
         </tbody>
       </table>
     </div>
@@ -187,13 +191,19 @@ function DefaulterTable({ rows }: { rows: OutstandingFamily[] }) {
   return (
     <table className="min-w-full text-sm">
       <thead className="sticky top-0 bg-card"><tr className="border-b text-left text-muted-foreground"><th className="py-2">Family</th><th>Pending Mo.</th><th>Total Due</th></tr></thead>
-      <tbody>{rows.map((r) => (
-        <tr key={r.family_id} className="border-b border-border/60">
-          <td className="py-2"><Link to={`/family-contributions/families/${r.family_id}`} className="text-primary hover:underline">{formatFamilyOption(r)}</Link></td>
-          <td>{r.pending_months}</td>
-          <td className="font-semibold text-destructive">{formatCurrency(r.total_outstanding)}</td>
-        </tr>
-      ))}</tbody>
+      <tbody>
+        {rows.length === 0 ? (
+          <tr><td colSpan={3} className="py-8 text-center text-sm text-muted-foreground">No defaulters found — all families are up to date!</td></tr>
+        ) : (
+          rows.map((r) => (
+            <tr key={r.family_id} className="border-b border-border/60">
+              <td className="py-2"><Link to={`/family-contributions/families/${r.family_id}`} className="text-primary hover:underline">{formatFamilyOption(r)}</Link></td>
+              <td>{r.pending_months}</td>
+              <td className="font-semibold text-destructive">{formatCurrency(r.total_outstanding)}</td>
+            </tr>
+          ))
+        )}
+      </tbody>
     </table>
   )
 }
@@ -202,9 +212,15 @@ function PaymentTable({ rows }: { rows: Array<{ receipt_number: string; amount: 
   return (
     <table className="min-w-full text-sm">
       <thead><tr className="border-b text-left text-muted-foreground"><th className="py-2">Receipt</th><th>Amount</th><th>Date</th><th>Mode</th></tr></thead>
-      <tbody>{rows.map((r, i) => (
-        <tr key={i} className="border-b border-border/60"><td className="py-2 font-mono text-xs">{r.receipt_number}</td><td>{formatCurrency(r.amount)}</td><td>{r.payment_date}</td><td>{r.payment_mode}</td></tr>
-      ))}</tbody>
+      <tbody>
+        {rows.length === 0 ? (
+          <tr><td colSpan={4} className="py-8 text-center text-sm text-muted-foreground">No payment records found</td></tr>
+        ) : (
+          rows.map((r, i) => (
+            <tr key={i} className="border-b border-border/60"><td className="py-2 font-mono text-xs">{r.receipt_number}</td><td>{formatCurrency(r.amount)}</td><td>{r.payment_date}</td><td>{r.payment_mode}</td></tr>
+          ))
+        )}
+      </tbody>
     </table>
   )
 }
@@ -213,9 +229,15 @@ function CollectionTable({ rows }: { rows: Array<{ category?: string; ward?: str
   return (
     <table className="min-w-full text-sm">
       <thead><tr className="border-b text-left text-muted-foreground"><th className="py-2">Name</th><th>Collected</th><th>Count</th></tr></thead>
-      <tbody>{rows.map((r, i) => (
-        <tr key={i} className="border-b border-border/60"><td className="py-2">{r.category || r.ward}</td><td>{formatCurrency(r.total_collected)}</td><td>{r.payment_count ?? r.family_count ?? "—"}</td></tr>
-      ))}</tbody>
+      <tbody>
+        {rows.length === 0 ? (
+          <tr><td colSpan={3} className="py-8 text-center text-sm text-muted-foreground">No collection data recorded for the selected period</td></tr>
+        ) : (
+          rows.map((r, i) => (
+            <tr key={i} className="border-b border-border/60"><td className="py-2">{r.category || r.ward}</td><td>{formatCurrency(r.total_collected)}</td><td>{r.payment_count ?? r.family_count ?? "—"}</td></tr>
+          ))
+        )}
+      </tbody>
     </table>
   )
 }
@@ -224,17 +246,23 @@ function LedgerTable({ rows }: { rows: LedgerEntry[] }) {
   return (
     <table className="min-w-full text-sm">
       <thead className="sticky top-0 bg-card"><tr className="border-b text-left text-muted-foreground"><th className="py-2">Date</th><th>Family</th><th>Category</th><th>Description</th><th>Debit</th><th>Credit</th><th>Balance</th></tr></thead>
-      <tbody>{rows.map((r) => (
-        <tr key={r.id} className="border-b border-border/60">
-          <td className="py-2">{r.entry_date}</td>
-          <td>{r.family_name || "—"}</td>
-          <td>{r.category_name || "—"}</td>
-          <td>{r.description}</td>
-          <td>{r.debit > 0 ? formatCurrency(r.debit) : "—"}</td>
-          <td>{r.credit > 0 ? formatCurrency(r.credit) : "—"}</td>
-          <td>{formatCurrency(r.balance)}</td>
-        </tr>
-      ))}</tbody>
+      <tbody>
+        {rows.length === 0 ? (
+          <tr><td colSpan={7} className="py-8 text-center text-sm text-muted-foreground">No ledger entries found</td></tr>
+        ) : (
+          rows.map((r) => (
+            <tr key={r.id} className="border-b border-border/60">
+              <td className="py-2">{r.entry_date}</td>
+              <td>{r.family_name || "—"}</td>
+              <td>{r.category_name || "—"}</td>
+              <td>{r.description}</td>
+              <td>{r.debit > 0 ? formatCurrency(r.debit) : "—"}</td>
+              <td>{r.credit > 0 ? formatCurrency(r.credit) : "—"}</td>
+              <td>{formatCurrency(r.balance)}</td>
+            </tr>
+          ))
+        )}
+      </tbody>
     </table>
   )
 }
